@@ -113,29 +113,45 @@ private:
     void draw_rows() {
         for (size_t i = 0; i < names.size(); i++) {
             int y = i + 3;
-            if (i == static_cast<size_t>(selected_row)) {
+            bool is_selected = (i == static_cast<size_t>(selected_row));
+            
+            if (is_selected) {
                 if (move_mode) {
                     attron(A_STANDOUT);
                 } else {
                     attron(A_REVERSE);
                 }
             }
+
+            // Print index
+            mvprintw(y, table_x + 2, " %zu ", i);
             
-            // Convert wide string to multibyte for printing
+            // Calculate name display width
+            int name_display_width = wcswidth(names[i].c_str(), names[i].length());
+            int name_padding = max_name_width - name_display_width;
+            
+            // Print name with proper padding
             char mb_name[256];
             wcstombs(mb_name, names[i].c_str(), sizeof(mb_name));
+            mvprintw(y, table_x + 6, " %s", mb_name);
             
-            mvprintw(y, table_x + 2, " %zu ", i);
-            mvprintw(y, table_x + 6, " %-*s ", max_name_width, mb_name);
+            // Fill remaining name space
+            for (int p = 0; p < name_padding; p++) {
+                addch(' ');
+            }
+            addch(' ');
+
+            // Print initiative
             mvprintw(y, table_x + 8 + max_name_width, " %3d ", inis[i]);
             
+            // Print hits
             if (hits[i] != -1488) {
                 mvprintw(y, table_x + 14 + max_name_width, " %3d ", hits[i]);
             } else {
                 mvprintw(y, table_x + 14 + max_name_width, "     ");
             }
-            
-            if (i == static_cast<size_t>(selected_row)) {
+
+            if (is_selected) {
                 if (move_mode) {
                     attroff(A_STANDOUT);
                 } else {
@@ -213,7 +229,7 @@ private:
         int ini = atoi(ini_str);
         
         char hits_str[256];
-        mvgetnstr(y + 4, x + 18, hits_str, sizeof(hits_str) - 1);
+        mvgetnstr(y + 4, x + 18 + 1, hits_str, sizeof(hits_str) - 1);
         int hits_val = -1488;
         if (strlen(hits_str) > 0) {
             hits_val = atoi(hits_str);
@@ -235,61 +251,77 @@ private:
     void show_edit_dialog() {
         if (names.empty()) return;
 
+        // Save original terminal settings
         bool original_echo = is_echo();
         int original_cursor = curs_set(1);
         
+        // Dialog setup
         int width = 30;
         int height = 6;
         int x = (getmaxx(stdscr) - width) / 2;
         int y = (getmaxy(stdscr) - height) / 2;
         
-        box(stdscr, 0, 0);
-        mvaddch(y, x, ACS_ULCORNER);
-        mvaddch(y, x + width, ACS_URCORNER);
-        mvaddch(y + height, x, ACS_LLCORNER);
-        mvaddch(y + height, x + width, ACS_LRCORNER);
-        
+        // Field positions
         const int name_x = x + 8;
         const int ini_x = x + 14;
-        const int hits_x = x + 8;
-        
-        // Convert to wide strings for editing
-        wstring fields[3] = {
-            names[selected_row],
-            to_wstring(inis[selected_row]),
-            hits[selected_row] == -1488 ? L"" : to_wstring(hits[selected_row])
-        };
-        
+        const int hits_x = x + 8;  // Keep consistent with other fields
+        const int field_width = 15; // Width for all fields
+
+        // Current values
+        wstring name_field = names[selected_row];
+        string ini_field = to_string(inis[selected_row]);
+        string hits_field = (hits[selected_row] == -1488) ? "" : to_string(hits[selected_row]);
+
         int current_field = 0;
         bool editing = true;
         
         while (editing) {
-            // Clear fields
-            for (int i = 0; i < 3; i++) {
-                mvprintw(y + 2 + i, x + 2, "%-*s", width - 4, "");
+            // Clear the dialog area
+            for (int i = 0; i < height; i++) {
+                mvprintw(y + i, x, "%-*s", width, "");
             }
-            
+
+            // Draw box
+            mvaddch(y, x, ACS_ULCORNER);
+            mvaddch(y, x + width, ACS_URCORNER);
+            mvaddch(y + height, x, ACS_LLCORNER);
+            mvaddch(y + height, x + width, ACS_LRCORNER);
+            for (int i = 1; i < width; i++) {
+                mvaddch(y, x + i, ACS_HLINE);
+                mvaddch(y + height, x + i, ACS_HLINE);
+            }
+            for (int i = 1; i < height; i++) {
+                mvaddch(y + i, x, ACS_VLINE);
+                mvaddch(y + i, x + width, ACS_VLINE);
+            }
+
+            // Draw labels
             mvprintw(y + 1, x + 2, "Edit Entry:");
             mvprintw(y + 2, x + 2, "Name: ");
             mvprintw(y + 3, x + 2, "Initiative: ");
             mvprintw(y + 4, x + 2, "Hits: ");
-            
-            // Convert wide strings to multibyte for display
+
+            // Convert wide string to multibyte for display
             char mb_name[256];
-            wcstombs(mb_name, fields[0].c_str(), sizeof(mb_name));
-            mvprintw(y + 2, name_x, "%-*s", max_name_width, mb_name);
-            mvprintw(y + 3, ini_x, "%-3s", fields[1].c_str());
-            mvprintw(y + 4, hits_x, "%-3s", fields[2].c_str());
+            wcstombs(mb_name, name_field.c_str(), sizeof(mb_name));
             
+            // Show field values with proper formatting
+            mvprintw(y + 2, name_x, "%-*s", field_width, mb_name);
+            mvprintw(y + 3, ini_x, "%-*s", field_width, ini_field.c_str());
+            mvprintw(y + 4, hits_x, "%-*s", field_width, hits_field.c_str());
+
+            // Position cursor
             int cursor_x = 0;
+            int cursor_y = y + 2 + current_field;
             switch (current_field) {
-                case 0: cursor_x = name_x + wcswidth(fields[0].c_str(), fields[0].length()); break;
-                case 1: cursor_x = ini_x + fields[1].length(); break;
-                case 2: cursor_x = hits_x + fields[2].length(); break;
+                case 0: cursor_x = name_x + wcswidth(name_field.c_str(), name_field.length()); break;
+                case 1: cursor_x = ini_x + ini_field.length(); break;
+                case 2: cursor_x = hits_x + hits_field.length(); break;
             }
-            move(y + 2 + current_field, min(cursor_x, x + width - 2));
+            move(cursor_y, min(cursor_x, x + width - 2));
             refresh();
             
+            // Get input
             int ch = getch();
             switch (ch) {
                 case KEY_UP:
@@ -298,48 +330,56 @@ private:
                 case KEY_DOWN:
                     current_field = min(2, current_field + 1);
                     break;
-                case '\n':
+                case '\n': // Enter
                     editing = false;
                     break;
-                case 27:
+                case 27: // ESC
                     editing = false;
                     if (!original_echo) noecho();
                     curs_set(original_cursor);
                     return;
                 case KEY_BACKSPACE:
                 case 127:
-                    if (!fields[current_field].empty()) {
-                        fields[current_field].pop_back();
+                    if (current_field == 0 && !name_field.empty()) {
+                        name_field.pop_back();
+                    } 
+                    else if (current_field == 1 && !ini_field.empty()) {
+                        ini_field.pop_back();
+                    }
+                    else if (current_field == 2 && !hits_field.empty()) {
+                        hits_field.pop_back();
                     }
                     break;
                 default:
                     if (current_field == 0) { // Name
-                        if (iswprint(ch) && fields[0].length() < max_name_width*2) {
-                            fields[0] += (wchar_t)ch;
+                        if (iswprint(ch) && name_field.length() < max_name_width*2) {
+                            name_field += (wchar_t)ch;
                         }
                     } 
                     else if (current_field == 1) { // Initiative
-                        if (isdigit(ch) && fields[1].length() < 7) {
-                            fields[1] += (wchar_t)ch;
+                        if (isdigit(ch) && ini_field.length() < 7) {
+                            ini_field += ch;
                         }
                     }
                     else if (current_field == 2) { // Hits
-                        if ((isdigit(ch) || (ch == '-' && fields[2].empty())) && 
-                            fields[2].length() < 7) {
-                            fields[2] += (wchar_t)ch;
+                        if ((isdigit(ch) || (ch == '-' && hits_field.empty())) && 
+                            hits_field.length() < 7) {
+                            hits_field += ch;
                         }
                     }
                     break;
             }
         }
         
-        if (!fields[0].empty()) {
-            names[selected_row] = fields[0];
-            inis[selected_row] = fields[1].empty() ? 0 : stoi(fields[1]);
-            hits[selected_row] = fields[2].empty() ? -1488 : stoi(fields[2]);
+        // Save changes
+        if (!name_field.empty()) {
+            names[selected_row] = name_field;
+            inis[selected_row] = ini_field.empty() ? 0 : stoi(ini_field);
+            hits[selected_row] = hits_field.empty() ? -1488 : stoi(hits_field);
             sortGoons();
         }
         
+        // Restore terminal settings
         if (!original_echo) noecho();
         curs_set(original_cursor);
     }
