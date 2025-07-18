@@ -1,4 +1,4 @@
 #!/bin/bash
 rm initi
-g++ initi.cpp -o initi -lncurses
+g++ initi.cpp -o initi -lncursesw
 ./initi

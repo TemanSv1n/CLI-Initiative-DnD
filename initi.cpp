@@ -1,20 +1,18 @@
-#include <ncurses.h>
+#include <ncurses.h>  
 #include <string>
 #include <vector>
 #include <algorithm>
 #include <cstring>
 #include <sstream>
+#include <locale.h>  // Needed for setlocale
 
 using namespace std;
 
 class TableRenderer {
 private:
-    vector<string> names //= {"Hitler", "Goonner", "Pedik"}
-    ;
-    vector<int> inis //= {10, 14, 93}
-    ;
-    vector<int> hits //= {14, 10, 13}
-    ;
+    vector<wstring> names;
+    vector<int> inis;
+    vector<int> hits;
     int selected_row = 0;
     int max_name_width = 10;
     int table_width, table_x;
@@ -40,7 +38,7 @@ private:
         hits.erase(hits.begin() + index);
     }
 
-    void addEntry(string name, int iniss, int hit = -1488) {
+    void addEntry(wstring name, int iniss, int hit = -1488) {
         names.push_back(name);
         inis.push_back(iniss);
         hits.push_back(hit);
@@ -51,7 +49,7 @@ private:
         if (from < 0 || from >= names.size() || to < 0 || to >= names.size()) return;
         
         // Save the entry we're moving
-        string name = names[from];
+        wstring name = names[from];
         int ini = inis[from];
         int hit = hits[from];
         
@@ -117,13 +115,18 @@ private:
             int y = i + 3;
             if (i == static_cast<size_t>(selected_row)) {
                 if (move_mode) {
-                    attron(A_STANDOUT);  // Different highlight for move mode
+                    attron(A_STANDOUT);
                 } else {
                     attron(A_REVERSE);
                 }
             }
+            
+            // Convert wide string to multibyte for printing
+            char mb_name[256];
+            wcstombs(mb_name, names[i].c_str(), sizeof(mb_name));
+            
             mvprintw(y, table_x + 2, " %zu ", i);
-            mvprintw(y, table_x + 6, " %-*s ", max_name_width, names[i].c_str());
+            mvprintw(y, table_x + 6, " %-*s ", max_name_width, mb_name);
             mvprintw(y, table_x + 8 + max_name_width, " %3d ", inis[i]);
             
             if (hits[i] != -1488) {
@@ -148,7 +151,7 @@ private:
         draw_horizontal_line(buttons_y - 2);
         
         int button_spacing = 2;
-        int buttons_x = (getmaxx(stdscr) - (60 + 5*button_spacing)) / 2;  // Increased width for new button
+        int buttons_x = (getmaxx(stdscr) - (60 + 5*button_spacing)) / 2;
         
         attron(A_REVERSE);
         if (move_mode) {
@@ -199,8 +202,11 @@ private:
         mvprintw(y + 3, x + 2, "Initiative: ");
         mvprintw(y + 4, x + 2, "Hits (optional): ");
         
-        char name[256];
-        mvgetnstr(y + 2, x + 8, name, sizeof(name) - 1);
+        // Use wint_t instead of wchar_t
+        wint_t wname[256];
+        echo();
+        curs_set(1);
+        mvgetn_wstr(y + 2, x + 8, wname, sizeof(wname)/sizeof(wint_t) - 1);
         
         char ini_str[256];
         mvgetnstr(y + 3, x + 14, ini_str, sizeof(ini_str) - 1);
@@ -216,41 +222,42 @@ private:
         noecho();
         curs_set(0);
         
-        if (strlen(name) > 0 && ini >= 0) {
-            addEntry(name, ini, hits_val);
+        if (wname[0] != 0 && ini >= 0) {
+            // Convert wint_t array to wstring
+            wstring name_str;
+            for (int i = 0; wname[i] != 0 && i < 255; i++) {
+                name_str += static_cast<wchar_t>(wname[i]);
+            }
+            addEntry(name_str, ini, hits_val);
         }
     }
 
     void show_edit_dialog() {
         if (names.empty()) return;
 
-        // Save original terminal settings
         bool original_echo = is_echo();
         int original_cursor = curs_set(1);
         
-        // Dialog setup
         int width = 30;
         int height = 6;
         int x = (getmaxx(stdscr) - width) / 2;
         int y = (getmaxy(stdscr) - height) / 2;
         
-        // Draw box
         box(stdscr, 0, 0);
         mvaddch(y, x, ACS_ULCORNER);
         mvaddch(y, x + width, ACS_URCORNER);
         mvaddch(y + height, x, ACS_LLCORNER);
         mvaddch(y + height, x + width, ACS_LRCORNER);
         
-        // Field positions
         const int name_x = x + 8;
         const int ini_x = x + 14;
         const int hits_x = x + 8;
         
-        // Current values
-        string fields[3] = {
+        // Convert to wide strings for editing
+        wstring fields[3] = {
             names[selected_row],
-            to_string(inis[selected_row]),
-            hits[selected_row] == -1488 ? "" : to_string(hits[selected_row])
+            to_wstring(inis[selected_row]),
+            hits[selected_row] == -1488 ? L"" : to_wstring(hits[selected_row])
         };
         
         int current_field = 0;
@@ -262,28 +269,27 @@ private:
                 mvprintw(y + 2 + i, x + 2, "%-*s", width - 4, "");
             }
             
-            // Draw labels and fields
             mvprintw(y + 1, x + 2, "Edit Entry:");
             mvprintw(y + 2, x + 2, "Name: ");
             mvprintw(y + 3, x + 2, "Initiative: ");
             mvprintw(y + 4, x + 2, "Hits: ");
             
-            // Show field values
-            mvprintw(y + 2, name_x, "%-*s", max_name_width, fields[0].c_str());
+            // Convert wide strings to multibyte for display
+            char mb_name[256];
+            wcstombs(mb_name, fields[0].c_str(), sizeof(mb_name));
+            mvprintw(y + 2, name_x, "%-*s", max_name_width, mb_name);
             mvprintw(y + 3, ini_x, "%-3s", fields[1].c_str());
             mvprintw(y + 4, hits_x, "%-3s", fields[2].c_str());
             
-            // Position cursor
             int cursor_x = 0;
             switch (current_field) {
-                case 0: cursor_x = name_x + fields[0].length(); break;
+                case 0: cursor_x = name_x + wcswidth(fields[0].c_str(), fields[0].length()); break;
                 case 1: cursor_x = ini_x + fields[1].length(); break;
                 case 2: cursor_x = hits_x + fields[2].length(); break;
             }
             move(y + 2 + current_field, min(cursor_x, x + width - 2));
             refresh();
             
-            // Get input
             int ch = getch();
             switch (ch) {
                 case KEY_UP:
@@ -292,12 +298,11 @@ private:
                 case KEY_DOWN:
                     current_field = min(2, current_field + 1);
                     break;
-                case '\n': // Enter
+                case '\n':
                     editing = false;
                     break;
-                case 27: // ESC
+                case 27:
                     editing = false;
-                    // Restore settings and return without saving
                     if (!original_echo) noecho();
                     curs_set(original_cursor);
                     return;
@@ -309,26 +314,25 @@ private:
                     break;
                 default:
                     if (current_field == 0) { // Name
-                        if (isprint(ch) && fields[0].length() < max_name_width*2) {
-                            fields[0] += ch;
+                        if (iswprint(ch) && fields[0].length() < max_name_width*2) {
+                            fields[0] += (wchar_t)ch;
                         }
                     } 
                     else if (current_field == 1) { // Initiative
                         if (isdigit(ch) && fields[1].length() < 7) {
-                            fields[1] += ch;
+                            fields[1] += (wchar_t)ch;
                         }
                     }
                     else if (current_field == 2) { // Hits
                         if ((isdigit(ch) || (ch == '-' && fields[2].empty())) && 
                             fields[2].length() < 7) {
-                            fields[2] += ch;
+                            fields[2] += (wchar_t)ch;
                         }
                     }
                     break;
             }
         }
         
-        // Save changes
         if (!fields[0].empty()) {
             names[selected_row] = fields[0];
             inis[selected_row] = fields[1].empty() ? 0 : stoi(fields[1]);
@@ -336,7 +340,6 @@ private:
             sortGoons();
         }
         
-        // Restore terminal settings
         if (!original_echo) noecho();
         curs_set(original_cursor);
     }
@@ -352,7 +355,6 @@ private:
         int x = (getmaxx(stdscr) - width) / 2;
         int y = (getmaxy(stdscr) - height) / 2;
         
-        // Draw box
         mvaddch(y, x, ACS_ULCORNER);
         mvaddch(y, x + width, ACS_URCORNER);
         mvaddch(y + height, x, ACS_LLCORNER);
@@ -366,11 +368,14 @@ private:
             mvaddch(y + i, x + width, ACS_VLINE);
         }
         
-        mvprintw(y + 1, x + 2, "Modify hits for %s:", names[selected_row].c_str());
+        // Convert name to multibyte for display
+        char mb_name[256];
+        wcstombs(mb_name, names[selected_row].c_str(), sizeof(mb_name));
+        mvprintw(y + 1, x + 2, "Modify hits for %s:", mb_name);
         mvprintw(y + 2, x + 2, "Hits: ");
         
         char hit_str[256];
-        mvgetnstr(y + 2, x + 8, hit_str, sizeof(hit_str) - 1);  // Changed from x+38 to x+8
+        mvgetnstr(y + 2, x + 8, hit_str, sizeof(hit_str) - 1);
         
         noecho();
         curs_set(0);
@@ -382,7 +387,7 @@ private:
             } else {
                 hits[selected_row] += hit_change;
             }
-            }
+        }
     }
 
     void start_move_mode() {
@@ -401,31 +406,6 @@ private:
         move_original_pos = -1;
     }
 
-    void show_dummy_dialog(const string& action) {
-        int width = 30;
-        int height = 3;
-        int x = (getmaxx(stdscr) - width) / 2;
-        int y = (getmaxy(stdscr) - height) / 2;
-        
-        mvaddch(y, x, ACS_ULCORNER);
-        mvaddch(y, x + width, ACS_URCORNER);
-        mvaddch(y + height, x, ACS_LLCORNER);
-        mvaddch(y + height, x + width, ACS_LRCORNER);
-        for (int i = 1; i < width; i++) {
-            mvaddch(y, x + i, ACS_HLINE);
-            mvaddch(y + height, x + i, ACS_HLINE);
-        }
-        for (int i = 1; i < height; i++) {
-            mvaddch(y + i, x, ACS_VLINE);
-            mvaddch(y + i, x + width, ACS_VLINE);
-        }
-        
-        mvprintw(y + 1, x + 2, "%s functionality", action.c_str());
-        mvprintw(y + 2, x + 2, "Press any key...");
-        refresh();
-        getch();
-    }
-
 public:
     void refresh_display() {
         clear();
@@ -438,6 +418,9 @@ public:
     }
 
     void run() {
+        // Set locale to support UTF-8
+        setlocale(LC_ALL, "");
+        
         initscr();
         cbreak();
         noecho();
@@ -447,7 +430,7 @@ public:
         refresh_display();
 
         int ch;
-        while ((ch = getch()) != 'q' && ch != 'Q') {
+        while ((ch = getch()) != 'q' && ch != 'Q' && ch != L'й' && ch != L'Й') {  // Q = й in Russian
             if (move_mode) {
                 switch(ch) {
                     case KEY_UP:
@@ -475,22 +458,22 @@ public:
                     case KEY_DOWN:
                         if (selected_row < static_cast<int>(names.size()) - 1) selected_row++;
                         break;
-                    case 'a': case 'A':
+                    case 'a': case 'A': case L'ф': case L'Ф':  // A = ф in Russian
                         show_add_dialog();
                         break;
-                    case 'e': case 'E':
+                    case 'e': case 'E': case L'у': case L'У':  // E = у in Russian
                         show_edit_dialog();
                         break;
-                    case 'd': case 'D':
+                    case 'd': case 'D': case L'в': case L'В':  // D = в in Russian
                         if (names.size() > 0) {
                             deleteEntry(selected_row);
                             if (selected_row >= names.size()) selected_row = names.size() - 1;
                         }
                         break;
-                    case 'h': case 'H':
+                    case 'h': case 'H': case L'р': case L'Р':  // H = р in Russian
                         show_hit_dialog();
                         break;
-                    case 'm': case 'M':
+                    case 'm': case 'M': case L'ь': case L'Ь':  // M = ь in Russian
                         start_move_mode();
                         break;
                 }
