@@ -4,29 +4,29 @@ A simple terminal initiative tracker for Dungeons & Dragons.
 
 ## Description
 
-The thing is intended to be used in terminal for easier and FOSSier initiative tracking, cuz existing solutions are way too bloated.
+The thing is intended to be used in terminal for **easier and FOSSier** initiative tracking, cuz **existing** solutions are way **too bloated**.
 
 **Usage:**
-* Entries are sorted by their initiative.
+* Entries are **sorted by** their **initiative**.
 * Use arrows to navigate.
 * Enter - confirm
 * Esc - go back
 
-* An entry consists of 3 things:
+* An **entry** consists of 3 things:
     * Name
     * Initiative
     * HitPoints (not necessary to set)
 
-* [A] - to add an entry.
-* [E] - to edit an entry
-* [D] - to delete an entry
-* [H] - to increment/decrement hits.
+* [**A**] - to add an entry.
+* [**E**] - to edit an entry
+* [**D**] - to delete an entry
+* [**H**] - to **incr**ement/**decr**ement hits.
     * Just enter number to increment.
     * Enter number with '-' to decrement.
-    * Remember, that hits can be undefined on entry creation? We introduce negative hits!\
+    * Remember, that hits can be undefined on entry creation? We introduce **negative hits!**\
     Just decrement hits and watch how damaged the thing is rn.
-* [M] - to swap entries with **equal initiative**.
-* [Q] - to quit program. **Achtung!! Session is RAM only**. All unsaved data will never be saved!
+* [**M**] - to swap entries with **equal initiative**.
+* [**Q**] - to **quit** program. **Achtung!! Session is RAM only**. All unsaved data will never be saved!
 
 ## Requirements
 
